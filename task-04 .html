@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Secure Chat App</title>
+  <style>
+    :root {
+      --bg: #f4f4f4;
+      --text: #000;
+      --panel: #fff;
+      --me: #dcf8c6;
+      --other: #e6e6e6;
+    }
+    body.dark {
+      --bg: #1a1a1a;
+      --text: #fff;
+      --panel: #2c2c2c;
+      --me: #3a5f3a;
+      --other: #444;
+    }
+    body {
+      font-family: Arial;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+      transition: 0.3s;
+    }
+    .box {
+      max-width: 500px;
+      margin: auto;
+      background: var(--panel);
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 { text-align: center; }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    #chat-box {
+      border: 1px solid #ccc;
+      height: 300px;
+      overflow-y: auto;
+      background: var(--bg);
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .msg {
+      margin: 5px 0;
+      padding: 8px;
+      border-radius: 5px;
+      max-width: 80%;
+      clear: both;
+    }
+    .me {
+      background: var(--me);
+      float: right;
+      text-align: right;
+    }
+    .other {
+      background: var(--other);
+      float: left;
+    }
+    .hidden { display: none; }
+
+    .toggle-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0;
+    }
+    .toggle-label {
+      margin: 0 10px;
+      font-weight: bold;
+    }
+    .slider-wrapper {
+      position: relative;
+      width: 100px;
+      height: 30px;
+      background: #ccc;
+      border-radius: 15px;
+      cursor: pointer;
+    }
+    .slider-btn {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 46px;
+      height: 26px;
+      border-radius: 13px;
+      background: #4caf50;
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+      text-align: center;
+      line-height: 26px;
+      transition: all 0.3s ease;
+    }
+    .slider-wrapper.public .slider-btn {
+      left: 52px;
+      background: #2196f3;
+    }
+
+    .theme-toggle {
+      position: fixed;
+      top: 10px;
+      right: 15px;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+    }
+    .theme-toggle label {
+      margin-right: 5px;
+      font-size: 14px;
+    }
+    .theme-toggle input[type="checkbox"] {
+      width: 40px;
+      height: 20px;
+      appearance: none;
+      background: #ccc;
+      border-radius: 20px;
+      position: relative;
+      outline: none;
+      cursor: pointer;
+    }
+    .theme-toggle input[type="checkbox"]::before {
+      content: "";
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      transition: 0.3s;
+    }
+    .theme-toggle input[type="checkbox"]:checked {
+      background: #0d6efd;
+    }
+    .theme-toggle input[type="checkbox"]:checked::before {
+      transform: translateX(20px);
+    }
+  </style>
+</head>
+<body>
+
+<div class="theme-toggle">
+  <label for="darkSwitch">🌓</label>
+  <input type="checkbox" id="darkSwitch" onchange="toggleDarkMode()">
+</div>
+
+<div class="box" id="loginBox">
+  <h2>Login to Chat</h2>
+  <input type="text" id="username" placeholder="Your name" required>
+  <input type="password" id="pin" placeholder="4-digit PIN" maxlength="4" required>
+  <button onclick="login()">Login</button>
+</div>
+
+<div class="box hidden" id="chatPanel">
+  <h2>Welcome, <span id="userLabel"></span></h2>
+
+  <div class="toggle-container">
+    <span class="toggle-label">Private</span>
+    <div class="slider-wrapper" id="modeSlider" onclick="toggleMode()">
+      <div class="slider-btn" id="sliderBtn">Private</div>
+    </div>
+    <span class="toggle-label">Public</span>
+  </div>
+
+  <select id="chatWith" class="hidden" onchange="loadMessages()"></select>
+
+  <div id="chat-box"></div>
+  <input type="text" id="messageInput" placeholder="Type a message" onkeypress="if(event.key==='Enter') sendMessage()">
+  <button onclick="sendMessage()">Send</button>
+</div>
+
+<script>
+  let currentUser = '';
+  let chatPartner = '';
+  let mode = 'private';
+
+  function login() {
+    const user = document.getElementById('username').value.trim();
+    const pin = document.getElementById('pin').value.trim();
+    if (!user || pin.length !== 4) return alert("Enter valid name and 4-digit PIN");
+    let users = JSON.parse(localStorage.getItem('chatUsers')) || {};
+    if (users[user] && users[user] !== pin) {
+      alert("Incorrect PIN");
+      return;
+    }
+    users[user] = pin;
+    localStorage.setItem('chatUsers', JSON.stringify(users));
+    currentUser = user;
+    document.getElementById('loginBox').classList.add('hidden');
+    document.getElementById('chatPanel').classList.remove('hidden');
+    document.getElementById('userLabel').textContent = currentUser;
+    loadUserList(users);
+    loadMessages();
+  }
+
+  function loadUserList(users) {
+    const select = document.getElementById('chatWith');
+    select.innerHTML = '<option disabled selected>Select user to chat with</option>';
+    Object.keys(users).forEach(u => {
+      if (u !== currentUser) {
+        const opt = document.createElement('option');
+        opt.value = u;
+        opt.textContent = u;
+        select.appendChild(opt);
+      }
+    });
+  }
+
+  function getChatKey(user1, user2) {
+    return mode === 'public' ? 'chat-public' : 'chat-' + [user1, user2].sort().join('-');
+  }
+
+  function toggleMode() {
+    const wrapper = document.getElementById('modeSlider');
+    const button = document.getElementById('sliderBtn');
+    if (mode === 'private') {
+      mode = 'public';
+      wrapper.classList.add('public');
+      button.textContent = 'Public';
+      document.getElementById('chatWith').classList.add('hidden');
+    } else {
+      mode = 'private';
+      wrapper.classList.remove('public');
+      button.textContent = 'Private';
+      document.getElementById('chatWith').classList.remove('hidden');
+    }
+    loadMessages();
+  }
+
+  function loadMessages() {
+    if (mode === 'private') {
+      chatPartner = document.getElementById('chatWith').value;
+      if (!chatPartner) return;
+    }
+    const box = document.getElementById('chat-box');
+    box.innerHTML = '';
+    const key = getChatKey(currentUser, chatPartner);
+    const msgs = JSON.parse(localStorage.getItem(key)) || [];
+    msgs.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'msg ' + (m.from === currentUser ? 'me' : 'other');
+      div.innerHTML = `<strong>${m.from}:</strong> ${m.text}`;
+      box.appendChild(div);
+    });
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function sendMessage() {
+    const text = document.getElementById('messageInput').value.trim();
+    if (!text || (mode === 'private' && !chatPartner)) return;
+    const key = getChatKey(currentUser, chatPartner);
+    const msgs = JSON.parse(localStorage.getItem(key)) || [];
+    msgs.push({ from: currentUser, text });
+    localStorage.setItem(key, JSON.stringify(msgs));
+    document.getElementById('messageInput').value = '';
+    loadMessages();
+  }
+
+  function toggleDarkMode() {
+    const isDark = document.getElementById("darkSwitch").checked;
+    document.body.classList.toggle('dark', isDark);
+    localStorage.setItem("chatTheme", isDark ? "dark" : "light");
+  }
+
+  window.onload = () => {
+    if (localStorage.getItem("chatTheme") === "dark") {
+      document.body.classList.add("dark");
+      document.getElementById("darkSwitch").checked = true;
+    }
+  };
+
+  setInterval(() => {
+    if (mode === 'public' || (mode === 'private' && chatPartner)) loadMessages();
+  }, 2000);
+</script>
+
+</body>
+</html>
